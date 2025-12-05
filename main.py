@@ -209,8 +209,8 @@ def rc_loop(tello: Tello, running_flag: list[bool]) -> None:
                 with debug_frame_lock:
                     debug_frame = frame.copy()
         if DEBUG:
-            # write the control command and time to log file
-            logging.debug(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}, LR: {lr}, FB: {fb}, UD: {ud}, YW: {yw}")
+            # write the control command and time(precision set to millisecond) to log file
+            logging.debug(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}, LR: {lr}, FB: {fb}, UD: {ud}, YW: {yw}")
             
         tello.send_rc_control(lr, fb, ud, yw)
         time.sleep(0.05)  # 20 Hz control loop
