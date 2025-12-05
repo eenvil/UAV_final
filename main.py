@@ -216,7 +216,7 @@ def main() -> None:
 
     tello = Tello()
     # set tello logging to not display
-    tello.set_debug_mode(False)
+    tello.LOGGER.setLevel(40)  # only show errors
     tello.connect()
     tello.streamon()
     cap = tello.get_frame_read()
