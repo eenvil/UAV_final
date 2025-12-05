@@ -79,6 +79,9 @@ def auto_step(tello: Tello, state: dict) -> Tuple[int, int, int, int]:
     elif state["current_state"] == "state72":
         [lr, fb, ud, yw], debug_frame, next_state = state72(cap.frame)
         state["current_state"] = next_state
+    else:
+        # Unknown state, do nothing
+        lr = fb = ud = yw = 0
     if cap is not None:
         frame = cap.frame
         # Save a debug frame for the main thread to show
