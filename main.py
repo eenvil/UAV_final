@@ -11,7 +11,7 @@ from state3 import state31,state32
 from state4 import state4
 from state5 import state5
 from state6 import state6
-from state7 import state7
+from state7 import state71,state72
 # --------- GLOBAL STATE ---------
 debug_frame: Optional[np.ndarray] = None
 debug_frame_lock = threading.Lock()
@@ -52,7 +52,33 @@ def auto_step(tello: Tello, state: dict) -> Tuple[int, int, int, int]:
     global cap, debug_frame
     lr = fb = ud = yw = 0
     debug_frame = None
-
+    if state["current_state"] == "state1":
+        [lr, fb, ud, yw], debug_frame, next_state = state1(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state2":
+        [lr, fb, ud, yw], debug_frame, next_state = state2(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state31":
+        [lr, fb, ud, yw], debug_frame, next_state = state31(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state32":
+        [lr, fb, ud, yw], debug_frame, next_state = state32(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state4":
+        [lr, fb, ud, yw], debug_frame, next_state = state4(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state5":
+        [lr, fb, ud, yw], debug_frame, next_state = state5(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state6":
+        [lr, fb, ud, yw], debug_frame, next_state = state6(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state71":
+        [lr, fb, ud, yw], debug_frame, next_state = state71(cap.frame)
+        state["current_state"] = next_state
+    elif state["current_state"] == "state72":
+        [lr, fb, ud, yw], debug_frame, next_state = state72(cap.frame)
+        state["current_state"] = next_state
     if cap is not None:
         frame = cap.frame
         # Save a debug frame for the main thread to show
