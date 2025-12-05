@@ -5,6 +5,8 @@ import time
 from typing import Optional, Tuple
 import cv2
 import numpy as np
+import logging
+
 from state1 import state1
 from state2 import state2
 from state3 import state31,state32
@@ -15,7 +17,8 @@ from state7 import state71,state72
 # --------- GLOBAL STATE ---------
 debug_frame: Optional[np.ndarray] = None
 debug_frame_lock = threading.Lock()
-
+DEBUG = False
+debug_file = None
 # Current mode: "manual" or "auto"
 mode = {"value": "manual"}
 
@@ -205,6 +208,10 @@ def rc_loop(tello: Tello, running_flag: list[bool]) -> None:
                 frame = cap.frame
                 with debug_frame_lock:
                     debug_frame = frame.copy()
+        if DEBUG:
+            # write the control command and time to log file
+            logging.debug(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}, LR: {lr}, FB: {fb}, UD: {ud}, YW: {yw}")
+            
         tello.send_rc_control(lr, fb, ud, yw)
         time.sleep(0.05)  # 20 Hz control loop
 
@@ -216,7 +223,12 @@ def main() -> None:
 
     tello = Tello()
     # set tello logging to not display
-    tello.LOGGER.setLevel(40)  # only show errors
+    tello.LOGGER.setLevel(40)
+    if DEBUG:
+        # create log file with time stamp
+        logging.basicConfig(filename=f"tello_debug_{time.strftime('%Y%m%d_%H%M%S')}.log", level=logging.DEBUG)
+        debug_file = logging.getLogger().handlers[0].baseFilename
+  # only show errors
     tello.connect()
     tello.streamon()
     cap = tello.get_frame_read()

@@ -25,3 +25,13 @@ def track_marker(frame,marker_id) -> Tuple[int, int, int, int]:
     pass
     return 0, 0, 0, 0
 
+def get_drone_position(frame, marker_id) -> Tuple[float, float, float]:
+    '''
+    Docstring for get_drone_position
+    
+    :param frame: the current video frame
+    :return: (x, y, z) position of the drone
+    :rtype: Tuple[float, float, float]
+    '''
+    pass
+    return
