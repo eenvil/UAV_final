@@ -25,7 +25,7 @@ if __name__ == "__main__":
     tello.streamon()
     frame_read = tello.get_frame_read()
 
-    marker_id = 1  # Change to your marker ID
+    marker_id = 2
 
     print("Starting pose tracking...  Press ESC to exit")
 

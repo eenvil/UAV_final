@@ -2,13 +2,49 @@ from typing import Tuple
 import cv2
 import numpy as np
 import math
+from simple_pid import PID
+
+
+def detect_doll(frame) -> int:
+    '''
+    Docstring for detect_doll
+    
+    :param frame: the current video frame
+    :return: 0 no doll detected, 1 kana, 2 melody
+    :rtype: int
+    '''
+    pass
+    return 0
+
+PID_X = PID(0.5, 0.0, 0.1, setpoint=0)
+PID_Y = PID(0.5, 0.0, 0.1, setpoint=0)
+PID_Z = PID(0.5, 0.0, 0.1, setpoint=0)
+PID_YAW = PID(0.5, 0.0, 0.1, setpoint=0)
+PID_X.output_limits = (-50, 50)
+PID_Y.output_limits = (-50, 50)
+PID_Z.output_limits = (-50, 50)
+PID_YAW.output_limits = (-50, 50)
+error_threshold = 0.05  # meters
+time_threshold = 1.0  # seconds
+
+def track_marker(frame,target_pos,marker_id) -> Tuple[int, int, int, int]:
+    '''
+    Docstring for track_marker
+    
+    :param frame: the current video frame
+    :return: (lr, fb, ud, yw) velocities to track the marker
+    :rtype: Tuple[int, int, int, int]
+    '''
+    x,y,z,yaw = get_drone_position(frame, marker_id)
+
+
 
 # ---- Global calibration state (lazy loaded from calibration.xml) ----
 CAMERA_MTX: np.ndarray
 DIST_COEFFS: np.ndarray
 
 # Physical side length of the ArUco marker (change this!)
-MARKER_LENGTH = 0.10  # e.g. 0.10 = 10 cm
+MARKER_LENGTH = 0.15  # e.g. 0.10 = 10 cm
 
 def __undistort_frame(self, frame: np.ndarray) -> np.ndarray:
     if self.K is not None and self.dist is not None:
@@ -27,29 +63,6 @@ def _load_calibration(calibration_file: str = "calibration.xml") -> None:
 
     if CAMERA_MTX is None or DIST_COEFFS is None:
         raise ValueError("Calibration file does not contain 'K' or 'dist' nodes.")
-
-def detect_doll(frame) -> int:
-    '''
-    Docstring for detect_doll
-    
-    :param frame: the current video frame
-    :return: 0 no doll detected, 1 kana, 2 melody
-    :rtype: int
-    '''
-    pass
-    return 0
-
-
-def track_marker(frame,marker_id) -> Tuple[int, int, int, int]:
-    '''
-    Docstring for track_marker
-    
-    :param frame: the current video frame
-    :return: (lr, fb, ud, yw) velocities to track the marker
-    :rtype: Tuple[int, int, int, int]
-    '''
-    pass
-
 def get_drone_position(frame: np.ndarray, marker_id: int) -> Tuple[float, float, float, float]:
     '''
     Compute the drone (camera) position in the marker coordinate system.
