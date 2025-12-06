@@ -16,6 +16,7 @@ def detect_doll(frame) -> int:
     pass
     return 0
 
+
 PID_X = PID(0.5, 0.0, 0.1, setpoint=0)
 PID_Y = PID(0.5, 0.0, 0.1, setpoint=0)
 PID_Z = PID(0.5, 0.0, 0.1, setpoint=0)
@@ -26,16 +27,98 @@ PID_Z.output_limits = (-50, 50)
 PID_YAW.output_limits = (-50, 50)
 error_threshold = 0.05  # meters
 time_threshold = 1.0  # seconds
+def reset_pid_controllers():
+    PID_X.reset()
+    PID_Y.reset()
+    PID_Z.reset()
+    PID_YAW.reset()
 
-def track_marker(frame,target_pos,marker_id) -> Tuple[int, int, int, int]:
+def track_marker(frame: np.ndarray, target_pos: np.ndarray, marker_id: int) -> Tuple[int, int, int, int]:
     '''
-    Docstring for track_marker
-    
-    :param frame: the current video frame
-    :return: (lr, fb, ud, yw) velocities to track the marker
-    :rtype: Tuple[int, int, int, int]
+    :param frame: current video frame
+    :param target_pos: np.array([x_target, y_target, z_target]) or [x, y, z, yaw_target]
+                       in marker coordinates, same units as get_drone_position
+    :param marker_id: ArUco marker ID
+    :return: (lr, fb, ud, yw) RC velocities for Tello
     '''
-    x,y,z,yaw = get_drone_position(frame, marker_id)
+
+    pose = get_drone_position(frame, marker_id)
+    if pose is None:
+        # Marker not found → hover
+        return 0, 0, 0, 0
+
+    x, y, z, yaw = pose
+
+    # Handle NaN (if your get_drone_position returns NaNs on failure)
+    if any(map(lambda v: isinstance(v, float) and math.isnan(v), (x, y, z, yaw))):
+        return 0, 0, 0, 0
+
+    # Target position (marker frame)
+    # target_pos may be 3D ([x,y,z]) or 4D ([x,y,z,yaw_target])
+    tx, ty, tz = target_pos[:3]
+    if target_pos.shape[0] >= 4:
+        tyaw = target_pos[3]
+    else:
+        tyaw = 0.0  # default: face the marker
+    # ------------------------------------------------------
+    # 1) Update PID setpoints
+    # ------------------------------------------------------
+    PID_X.setpoint   = tx
+    PID_Y.setpoint   = ty
+    PID_Z.setpoint   = tz
+    PID_YAW.setpoint = tyaw
+
+    # ------------------------------------------------------
+    # 2) Compute raw PID outputs (in "marker" coordinates)
+    #    simple-pid uses: error = setpoint - measurement
+    # ------------------------------------------------------
+    u_x   = PID_X(x)     # control to reduce (tx - x)
+    u_y   = PID_Y(y)     # control to reduce (ty - y)
+    u_z   = PID_Z(z)     # control to reduce (tz - z)
+    u_yaw = PID_YAW(yaw) # control to reduce (tyaw - yaw)
+
+    # ------------------------------------------------------
+    # 3) Deadzone around target (to avoid twitching)
+    # ------------------------------------------------------
+    # Position deadzone
+    if abs(tx - x) < error_threshold:
+        u_x = 0.0
+    if abs(ty - y) < error_threshold:
+        u_y = 0.0
+    if abs(tz - z) < error_threshold:
+        u_z = 0.0
+
+    # Yaw deadzone (e.g. 3 degrees)
+    yaw_error = tyaw - yaw
+    if abs(yaw_error) < math.radians(3.0):
+        u_yaw = 0.0
+
+    # ------------------------------------------------------
+    # 4) Map control outputs to Tello RC axes
+    #
+    # send_rc_control(lr, fb, ud, yaw)
+    #   lr  > 0 : move right
+    #   fb  > 0 : move forward
+    #   ud  > 0 : move up
+    #   yaw > 0 : rotate CCW
+    #
+    # Assuming marker coordinates:
+    #   x: right  (+x → marker right)
+    #   y: down   (+y → marker down)
+    #   z: out of marker towards drone
+    #
+    # We want:
+    #   x error → left/right   (lr)
+    #   y error → up/down      (ud)
+    #   z error → forward/back (fb)
+    # ------------------------------------------------------
+
+    lr = int(u_x)       # type: ignore # +u_x → move right to increase x
+    fb = int(u_z)       # type: ignore # +u_z → move forward to decrease distance error
+    ud = int(-u_y)      # type: ignore # if +y means "down", then -u_y: positive → move up
+    yw = int(u_yaw)     # type: ignore # +u_yaw → CCW rotation
+
+    return lr, fb, ud, yw
 
 
 
