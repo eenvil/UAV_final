@@ -8,8 +8,10 @@ from yolo.models.experimental import attempt_load
 from yolo.utils.datasets import letterbox
 from yolo.utils.general import non_max_suppression_kpt, scale_coords
 from yolo.utils.plots import plot_one_box
-
-def detect_doll(frame, model, device) -> int:
+from yolo.models.experimental import attempt_load
+device = torch.device('cpu')
+model = attempt_load('./yolo/best.pt', map_location=device) 
+def detect_doll(frame) -> int:
     '''
     Docstring for detect_doll
     
@@ -18,11 +20,7 @@ def detect_doll(frame, model, device) -> int:
     :rtype: int
     '''
     # Load model before calling this function, device default to cpu
-    '''
-    from models.experimental import attempt_load
-    device = torch.device('cpu')
-    model = attempt_load('./yolo/best.pt', map_location=device) 
-    '''
+    global model, device
     if frame is None:
         return 0
     # Pre-process image
