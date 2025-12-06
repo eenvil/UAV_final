@@ -2,17 +2,17 @@ import numpy as np
 import torch
 import cv2
 from torchvision import transforms
-from yolo.models.experimental import attempt_load
-from yolo.utils.datasets import letterbox
-from yolo.utils.general import non_max_suppression_kpt, scale_coords
-from yolo.utils.plots import plot_one_box
-from yolo.models.experimental import attempt_load
+from models.experimental import attempt_load
+from utils.datasets import letterbox
+from utils.general import non_max_suppression_kpt, scale_coords
+from utils.plots import plot_one_box
+from models.experimental import attempt_load
 from typing import Tuple
 import math
 from simple_pid import PID
 
 device = torch.device('cpu')
-model = attempt_load('./yolo/best.pt', map_location=device) 
+model = attempt_load('./best.pt', map_location=device) 
 def detect_doll(frame) -> int:
     '''
     Docstring for detect_doll
