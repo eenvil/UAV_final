@@ -39,6 +39,20 @@ auto_state = {
 listener: Optional[keyboard.Listener] = None
 # --------- END GLOBAL STATE ---------
 # --------- AUTO MODE BEHAVIOR (YOU EDIT HERE) ---------
+CALIBRATE_FILE = "calibration.xml"
+K = None
+dist = None
+def _calibrate_auto_state(CALIBRATE_FILE) -> None:
+    global K, dist
+    if K is None or dist is None:
+        fs = cv2.FileStorage(CALIBRATE_FILE, cv2.FILE_STORAGE_READ)
+        if not fs.isOpened():
+            raise IOError(f"Cannot open calibration file: {CALIBRATE_FILE}")
+
+        K = fs.getNode("K").mat()
+        dist = fs.getNode("dist").mat()   # <--- HERE: use "dist", not "distCoeffs"
+        fs.release()
+
 cap = None
 def auto_step(tello: Tello, state: dict) -> Tuple[int, int, int, int]:
     """
@@ -52,44 +66,51 @@ def auto_step(tello: Tello, state: dict) -> Tuple[int, int, int, int]:
     # Example: simple "do nothing" behavior
     # Replace this with your own logic
     state["t"] += 0.05
-    global cap, debug_frame
+    global cap, debug_frame, K, dist
     lr = fb = ud = yw = 0
-    debug_frame = None
+    tmp_debug_frame = None
+    if cap is None:
+        return lr, fb, ud, yw
+    frame = cap.frame
+    if frame is not None and K is not None and dist is not None:
+        frame = cv2.undistort(frame, K, dist)
     if state["current_state"] == "state1":
-        [lr, fb, ud, yw], debug_frame, next_state = state1(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state1(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state2":
-        [lr, fb, ud, yw], debug_frame, next_state = state2(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state2(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state31":
-        [lr, fb, ud, yw], debug_frame, next_state = state31(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state31(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state32":
-        [lr, fb, ud, yw], debug_frame, next_state = state32(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state32(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state4":
-        [lr, fb, ud, yw], debug_frame, next_state = state4(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state4(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state5":
-        [lr, fb, ud, yw], debug_frame, next_state = state5(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state5(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state6":
-        [lr, fb, ud, yw], debug_frame, next_state = state6(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state6(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state71":
-        [lr, fb, ud, yw], debug_frame, next_state = state71(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state71(frame)
         state["current_state"] = next_state
     elif state["current_state"] == "state72":
-        [lr, fb, ud, yw], debug_frame, next_state = state72(cap.frame)
+        [lr, fb, ud, yw], tmp_debug_frame, next_state = state72(frame)
         state["current_state"] = next_state
     else:
         # Unknown state, do nothing
         lr = fb = ud = yw = 0
     if cap is not None:
-        frame = cap.frame
+        if tmp_debug_frame is None:
+            tmp_debug_frame = cap.frame
         # Save a debug frame for the main thread to show
-        with debug_frame_lock:
-            debug_frame = frame.copy()
+    with debug_frame_lock:
+        debug_frame = tmp_debug_frame
+        if debug_frame is not None:
             debug_frame = cv2.putText(
                 debug_frame, "AUTO MODE", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2
             )
@@ -246,6 +267,8 @@ def main() -> None:
     # Start keyboard listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
+
+    _calibrate_auto_state(CALIBRATE_FILE)  # Load calibration once at start
 
     # ---- MAIN THREAD: show debug frame while waiting for ESC ----
     while listener.is_alive() and running[0]:
