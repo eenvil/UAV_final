@@ -63,8 +63,8 @@ PID_X.output_limits = (-50, 50)
 PID_Y.output_limits = (-50, 50)
 PID_Z.output_limits = (-50, 50)
 PID_YAW.output_limits = (-50, 50)
-error_threshold = 0.05  # meters
-time_threshold = 1.0  # seconds
+error_threshold = 0.1  # meters
+yaw_error_threshold = math.radians(10.0)  # radians
 def reset_pid_controllers():
     PID_X.reset()
     PID_Y.reset()
@@ -135,14 +135,14 @@ def track_marker(frame: np.ndarray,
         u_z = 0.0
 
     # Overall distance deadzone (more aggressive smoothing)
-    dist = math.sqrt((tx - x_m)**2 + (ty - y_m)**2 + (tz - z_m)**2)
-    if dist < error_threshold:
-        u_x = u_y = u_z = 0.0
+    # dist = math.sqrt((tx - x_m)**2 + (ty - y_m)**2 + (tz - z_m)**2)
+    # if dist < error_threshold:
+    #     u_x = u_y = u_z = 0.0
 
     # Yaw deadzone (e.g. 3 degrees)
     yaw_error = tyaw - yaw
     # (optional) wrap to [-pi, pi] if your yaw can go beyond that
-    if abs(yaw_error) < math.radians(3.0):
+    if abs(yaw_error) < yaw_error_threshold:
         u_yaw = 0.0
 
     # ------------------------------------------------------
@@ -179,7 +179,7 @@ def track_marker(frame: np.ndarray,
     lr = clip_rc(v_xc*100) # scale to cm/s
     fb = clip_rc(v_zc*100)
     ud = clip_rc(-v_yc*100)   # +y_c is down → negative to go up
-    yw = clip_rc(u_yaw, limit=50)  # already limited by PID_YAW.output_limits
+    yw = clip_rc(u_yaw*100 if u_yaw is not None else 0.0, limit=50)  # already limited by PID_YAW.output_limits
 
     return lr, fb, ud, yw
 
