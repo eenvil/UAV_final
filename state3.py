@@ -275,7 +275,7 @@ def line_tracking_state(
 
     velocities = (left_right_velocity,
                   forward_backward_velocity,
-                  up_down_velocity,
+                  -up_down_velocity, # cv2 y-axis is inverted
                   yaw_velocity)
     
     return velocities, is_intersection, vis
