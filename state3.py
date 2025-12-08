@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Tuple
 import cv2
 import numpy as np
+from func import get_drone_position
 from cv2.typing import MatLike
 
 # ----------------- CONFIG -----------------
@@ -280,13 +281,119 @@ def line_tracking_state(
     
     return velocities, is_intersection, vis
 #line tracking until detec until detecting aruco marker 2
+turning_seq_1 =["left", "left", "up","left", "down", "left","down","left"]
+turning_seq_2 =["left", "up", "left", "up", "left", "down", "left", "left"]
+# Global evolving indices for the state machines
+state31_idx = 0
+state32_idx = 0
+state31_cooldown = 0
+state32_cooldown = 0
+
+
 def state31(frame):
-    # todo: implement state3 behavior
-    raise NotImplementedError("state3 behavior not implemented yet")
-    return [lr, fb, ud, yw], debug_frame, next_state
+    """
+    Follow turning_seq_1 normally.  
+    At the LAST direction: ignore line, move LEFT until marker 2 detected.
+    """
+    global state31_idx, state31_cooldown
+
+    target_width_px = 40.0
+    cooldown_frames = 25
+    marker_id = 2
+
+    # ---------- CHECK FOR MARKER 2 ----------
+    x, y, z, yaw, _ = get_drone_position(frame, marker_id)
+    marker_seen = not np.isnan(x)
+
+    # ---------- FINAL STEP BEHAVIOR ----------
+    if state31_idx == len(turning_seq_1) - 1:  
+        # Force LEFT motion
+        lr = -25       # move left slowly
+        fb = 0
+        ud = 0
+        yw = 0
+
+        debug = frame.copy()
+        cv2.putText(debug, "FINAL STEP: Moving LEFT to find Marker 2", 
+                    (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+
+        # If marker 2 is detected → switch state
+        if marker_seen:
+            print("[state31] Marker 2 detected → switching to next state")
+            next_state = "state4"     # You decide the next state name
+        else:
+            next_state = "state31"
+
+        return [lr, fb, ud, yw], debug, next_state
+
+    # ========== NORMAL LINE TRACKING STEP ==========
+    turn_direction = turning_seq_1[state31_idx]
+    (lr, fb, ud, yw), is_intersection, debug = line_tracking_state(
+        frame, turn_direction, target_width_px
+    )
+
+    # Intersection direction switching
+    if state31_cooldown > 0:
+        state31_cooldown -= 1
+    else:
+        if is_intersection and state31_idx < len(turning_seq_1) - 1:
+            state31_idx += 1
+            state31_cooldown = cooldown_frames
+            print(f"[state31] Switched to: {turning_seq_1[state31_idx]}")
+
+    return [lr, fb, ud, yw], debug, "state31"
+
+
+
 def state32(frame):
-    raise NotImplementedError("state3.2 behavior not implemented yet")
-    return [lr, fb, ud, yw], debug_frame, next_state
+    """
+    Follow turning_seq_2 normally.
+    At the LAST direction: ignore line, move LEFT until marker 2 detected.
+    """
+    global state32_idx, state32_cooldown
+
+    target_width_px = 40.0
+    cooldown_frames = 25
+    marker_id = 2
+
+    # ---------- CHECK FOR MARKER 2 ----------
+    x, y, z, yaw, _ = get_drone_position(frame, marker_id)
+    marker_seen = not np.isnan(x)
+
+    # ---------- FINAL STEP BEHAVIOR ----------
+    if state32_idx == len(turning_seq_2) - 1:
+        lr = -25
+        fb = 0
+        ud = 0
+        yaw = 0
+
+        debug = frame.copy()
+        cv2.putText(debug, "FINAL STEP: Moving LEFT to find Marker 2",
+                    (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+
+        if marker_seen:
+            print("[state32] Marker 2 detected → switching to next state")
+            next_state = "state4"
+        else:
+            next_state = "state32"
+
+        return [lr, fb, ud, yaw], debug, next_state
+
+    # ========== NORMAL LINE TRACKING STEP ==========
+    turn_direction = turning_seq_2[state32_idx]
+    (lr, fb, ud, yaw), is_intersection, debug = line_tracking_state(
+        frame, turn_direction, target_width_px
+    )
+
+    if state32_cooldown > 0:
+        state32_cooldown -= 1
+    else:
+        if is_intersection and state32_idx < len(turning_seq_2) - 1:
+            state32_idx += 1
+            state32_cooldown = cooldown_frames
+            print(f"[state32] Switched to: {turning_seq_2[state32_idx]}")
+
+    return [lr, fb, ud, yaw], debug, "state32"
 
 if __name__ == "__main__":
     # Direction plan: switch to next after each intersection
