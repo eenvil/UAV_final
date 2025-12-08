@@ -14,7 +14,7 @@ def state4(frame):
     global last_arrival_time
     current_time = datetime.datetime.now().timestamp()
     lr,fb,ud,yw = track_marker(frame,location,marker_id)
-    if any(v != 0 for v in [lr, fb, ud, yw]):
+    if any(v != 0 for v in [lr, fb, ud, yw]) or get_drone_position(frame,marker_id) is None:
         last_arrival_time = current_time
     if current_time - last_arrival_time >= location_time_thresh:
         # reached location

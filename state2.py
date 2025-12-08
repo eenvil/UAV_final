@@ -34,7 +34,7 @@ def state2(frame):
             doll_detected = 0
         last_detect_time = current_time
     lr, fb, ud, yw = func.track_marker(frame, location, marker_id)
-    if any(v != 0 for v in [lr, fb, ud, yw]):
+    if any(v != 0 for v in [lr, fb, ud, yw]) or func.get_drone_position(frame,marker_id) is None:
         last_arrival_time = current_time
     if current_time - last_arrival_time >= location_time_thresh:
         # reached location
