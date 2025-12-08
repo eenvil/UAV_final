@@ -55,15 +55,15 @@ def detect_doll(frame) -> int:
     return 0
 
 
-PID_X = PID(0.5, 0.0, 0.1, setpoint=0)
-PID_Y = PID(0.5, 0.0, 0.1, setpoint=0)
-PID_Z = PID(0.5, 0.0, 0.1, setpoint=0)
-PID_YAW = PID(0.5, 0.0, 0.1, setpoint=0)
+PID_X = PID(50, 0.0, 20, setpoint=0)
+PID_Y = PID(100, 0.0, 40, setpoint=0)
+PID_Z = PID(50, 0.0, 20, setpoint=0)
+PID_YAW = PID(30, 0.0, 12, setpoint=0)
 PID_X.output_limits = (-50, 50)
-PID_Y.output_limits = (-50, 50)
+PID_Y.output_limits = (-70, 70)
 PID_Z.output_limits = (-50, 50)
 PID_YAW.output_limits = (-50, 50)
-error_threshold = 0.1  # meters
+error_threshold = 0.16  # meters
 yaw_error_threshold = math.radians(10.0)  # radians
 def reset_pid_controllers():
     PID_X.reset()
@@ -176,10 +176,10 @@ def track_marker(frame: np.ndarray,
     def clip_rc(v: float, limit: int = 50) -> int:
         return int(max(-limit, min(limit, round(v))))
 
-    lr = clip_rc(v_xc*100) # scale to cm/s
-    fb = clip_rc(v_zc*100)
-    ud = clip_rc(-v_yc*100)   # +y_c is down → negative to go up
-    yw = clip_rc(u_yaw*100 if u_yaw is not None else 0.0, limit=50)  # already limited by PID_YAW.output_limits
+    lr = clip_rc(v_xc) # scale to cm/s
+    fb = clip_rc(v_zc)
+    ud = clip_rc(-v_yc)   # +y_c is down → negative to go up
+    yw = clip_rc(u_yaw if u_yaw is not None else 0.0, limit=50)  # already limited by PID_YAW.output_limits
 
     return lr, fb, ud, yw
 
@@ -188,6 +188,14 @@ def track_marker(frame: np.ndarray,
 # ---- Global calibration state (lazy loaded from calibration.xml) ----
 CAMERA_MTX: np.ndarray
 DIST_COEFFS: np.ndarray
+CALIBRATE_FILE = "calibration.xml"
+fs = cv2.FileStorage(CALIBRATE_FILE, cv2.FILE_STORAGE_READ)
+if not fs.isOpened():
+    raise IOError(f"Cannot open calibration file: {CALIBRATE_FILE}")
+
+CAMERA_MTX = fs.getNode("K").mat()
+DIST_COEFFS = fs.getNode("dist").mat()   # <--- HERE: use "dist", not "distCoeffs"
+fs.release()
 
 # Physical side length of the ArUco marker (change this!)
 MARKER_LENGTH = 0.15  # e.g. 0.10 = 10 cm
@@ -197,81 +205,83 @@ def get_drone_position(frame: np.ndarray,
                        ) -> Tuple[float, float, float, float, Tuple[np.ndarray, np.ndarray]]:
     '''
     Compute the drone (camera) position in the marker coordinate system.
-
-    :param frame: current BGR video frame from the drone
-    :param marker_id: ArUco marker ID to track
-    :return: (x, y, z, yaw) of the drone in marker coordinates
-             units are the same as MARKER_LENGTH (e.g. meters)
-             yaw is in radians
-             rvec and tvec are the rotation and translation vectors from
-             the marker to the camera (drone) frame.
-             returns (nan, nan, nan, nan, (nan, nan)) if marker not found
+    Compatible with OpenCV 4.9+
     '''
 
     # Safety: make sure calibration is loaded
-    # (remove this if you initialize CAMERA_MTX/DIST_COEFFS right here)
-    if CAMERA_MTX is None or DIST_COEFFS is None:
-        raise RuntimeError("CAMERA_MTX and DIST_COEFFS must be initialized before calling get_drone_position")
-
     # --- Detect ArUco marker ---
-    # If your frame is already undistorted, this is fine.
-    # If not, you can optionally undistort here using CAMERA_MTX & DIST_COEFFS.
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # 4x4 dictionary (change if you used a different one)
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 
-    # OpenCV 4.7+:
-    try:
-        parameters = cv2.aruco.DetectorParameters()
-    except AttributeError:
-        # Older OpenCV:
-        parameters = cv2.aruco.DetectorParameters_create() # type: ignore
-
+    # OpenCV 4.7+ / 4.9 Detector setup
+    parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+    
     corners, ids, _ = detector.detectMarkers(gray)
 
+    # Helper for returning NaNs
+    nan3 = np.array([float('nan'), float('nan'), float('nan')])
+    
     if ids is None:
-        # No markers at all
-        nan3 = np.array([float('nan'), float('nan'), float('nan')])
         return float('nan'), float('nan'), float('nan'), float('nan'), (nan3, nan3)
 
     ids = ids.flatten()
     if marker_id not in ids:
-        # Our marker not found
-        nan3 = np.array([float('nan'), float('nan'), float('nan')])
         return float('nan'), float('nan'), float('nan'), float('nan'), (nan3, nan3)
 
     # Index of the desired marker
     idx = int(np.where(ids == marker_id)[0][0])
-    marker_corners = [corners[idx]]  # shape (1, 4, 2)
+    
+    # Get the 2D corners of the specific marker we found
+    # corners[idx] is shape (1, 4, 2) -> we need (4, 2) for solvePnP
+    marker_corners_img = corners[idx][0]
 
-    # --- Estimate pose of the marker (marker -> camera) ---
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        marker_corners,
-        MARKER_LENGTH,
-        CAMERA_MTX,
-        DIST_COEFFS
+    # --- Estimate pose (cv2.solvePnP instead of estimatePoseSingleMarkers) ---
+    
+    # Define the 3D coordinates of the marker corners in the marker's own frame.
+    # The center is (0,0,0). Z points out of the marker.
+    # Order: Top-Left, Top-Right, Bottom-Right, Bottom-Left (matches detectMarkers output)
+    half_size = MARKER_LENGTH / 2.0
+    marker_obj_points = np.array([
+        [-half_size,  half_size, 0],  # Top-Left
+        [ half_size,  half_size, 0],  # Top-Right
+        [ half_size, -half_size, 0],  # Bottom-Right
+        [-half_size, -half_size, 0]   # Bottom-Left
+    ], dtype=np.float32)
+
+    # Solve PnP to get rotation (rvec) and translation (tvec) of marker relative to camera
+    success, rvec, tvec = cv2.solvePnP(
+        marker_obj_points, 
+        marker_corners_img, 
+        CAMERA_MTX, 
+        DIST_COEFFS, 
+        flags=cv2.SOLVEPNP_IPPE_SQUARE
     )
 
-    # rvecs: (1, 1, 3) or (1, 3); tvecs: (1, 1, 3) or (1, 3)
-    rvec = rvecs[0].reshape(3, 1)
-    tvec = tvecs[0].reshape(3, 1)
+    if not success:
+        return float('nan'), float('nan'), float('nan'), float('nan'), (nan3, nan3)
 
+    # Ensure vectors are (3, 1) shape for matrix math
+    rvec = rvec.reshape(3, 1)
+    tvec = tvec.reshape(3, 1)
+
+    # --- Coordinate Transformation ---
+    
     # Rotation from marker frame (world) to camera frame (body)
     R_marker_to_cam, _ = cv2.Rodrigues(rvec)
 
-    # ---- Camera position in marker frame ----
-    # If X_cam = R_mc * X_marker + t_mc,
-    # then camera origin in marker frame is:
-    #   X_marker(cam) = -R_mc^T * t_mc
+    # Camera position in marker frame:
+    # X_marker(cam) = -R_mc^T * t_mc
     R_cam_to_marker = R_marker_to_cam.T
     t_cam_in_marker = -R_cam_to_marker @ tvec
 
     x, y, z = t_cam_in_marker.flatten().tolist()
 
-    # ---- Yaw: rotation around marker Z, from marker X toward marker Y ----
-    # Standard yaw from rotation matrix (Z-Y-X convention)
+    # ---- Yaw Calculation ----
+    # Rotation of the camera relative to the marker
+    # We extract yaw from the rotation matrix
     yaw = math.atan2(R_marker_to_cam[1, 0], R_marker_to_cam[0, 0])
 
     return float(x), float(y), float(z), float(yaw), (rvec, tvec)

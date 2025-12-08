@@ -33,7 +33,7 @@ movement = {
 # Optional: state for your auto controller
 auto_state = {
     "t": 0.0,  # example time variable you might want to use
-    "current_state": "state1",  # example state variable
+    "current_state": "state2",  # example state variable
 }
 
 listener: Optional[keyboard.Listener] = None

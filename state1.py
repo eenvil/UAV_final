@@ -169,5 +169,9 @@ def state1(frame):
         )
 
     # 你現在不想切到 state2，那就一直留在 state1
-    next_state = "state1"
+    if _sequence_index < len(_flight_sequence):
+            next_state = "state1"
+    else:
+        next_state = "state2"
+        
     return [lr, fb, ud, yw], debug_frame, next_state

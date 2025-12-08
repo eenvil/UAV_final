@@ -12,8 +12,8 @@ THICKNESS_THRESHOLD_PX = 8.0
 MIN_OCCUPANCY_FRACTION = 0.01      # for 3x3 grid
 
 # Gains for converting pixel error -> velocity [-100, 100]
-K_LR = 100.0      # left/right gain
-K_UD = 100.0      # up/down gain
+K_LR = 20.0      # left/right gain
+K_UD = 60.0      # up/down gain
 K_FB = 2.0        # forward/backward gain based on width error
 
 # Size of ROI around image center for width estimation
@@ -283,56 +283,78 @@ def line_tracking_state(
 #line tracking until detec until detecting aruco marker 2
 turning_seq_1 =["left", "left", "up","left", "down", "left","down","left"]
 turning_seq_2 =["left", "up", "left", "up", "left", "down", "left", "left"]
+
 # Global evolving indices for the state machines
 state31_idx = 0
 state32_idx = 0
 state31_cooldown = 0
 state32_cooldown = 0
 
+# NEW: buffer time frames at start of each state
+state31_buffer = 25     # fly left for 40 frames before doing anything
+state32_buffer = 25
+
+
 
 def state31(frame):
     """
-    Follow turning_seq_1 normally.  
-    At the LAST direction: ignore line, move LEFT until marker 2 detected.
+    Follow turning_seq_1 normally.
+    Fly LEFT for buffer period first.
+    At final step: ignore line, move LEFT until marker 2 detected.
     """
-    global state31_idx, state31_cooldown
+    global state31_idx, state31_cooldown, state31_buffer
 
     target_width_px = 40.0
-    cooldown_frames = 25
+    cooldown_frames = 35
     marker_id = 2
 
+    # ---------- BUFFER TIME: fly left first ----------
+    if state31_buffer > 0:
+        state31_buffer -= 1
+        lr = -25
+        fb = 0
+        ud = 0
+        yaw = 0
+
+        debug = frame.copy()
+        cv2.putText(debug, f"BUFFER: Moving LEFT ({state31_buffer} left)",
+                    (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+
+        return [lr, fb, ud, yaw], debug, "state31"
+
+
+
     # ---------- CHECK FOR MARKER 2 ----------
-    x, y, z, yaw, _ = get_drone_position(frame, marker_id)
+    x, y, z, yaw_val, _ = get_drone_position(frame, marker_id)
     marker_seen = not np.isnan(x)
 
     # ---------- FINAL STEP BEHAVIOR ----------
-    if state31_idx == len(turning_seq_1) - 1:  
-        # Force LEFT motion
-        lr = -25       # move left slowly
+    if state31_idx == len(turning_seq_1) - 1:
+        lr = -25
         fb = 0
         ud = 0
-        yw = 0
+        yaw = 0
 
         debug = frame.copy()
-        cv2.putText(debug, "FINAL STEP: Moving LEFT to find Marker 2", 
+        cv2.putText(debug, "FINAL STEP: Moving LEFT to find Marker 2",
                     (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-        # If marker 2 is detected → switch state
         if marker_seen:
             print("[state31] Marker 2 detected → switching to next state")
-            next_state = "state4"     # You decide the next state name
+            next_state = "state4"
         else:
             next_state = "state31"
 
-        return [lr, fb, ud, yw], debug, next_state
+        return [lr, fb, ud, yaw], debug, next_state
+
 
     # ========== NORMAL LINE TRACKING STEP ==========
     turn_direction = turning_seq_1[state31_idx]
-    (lr, fb, ud, yw), is_intersection, debug = line_tracking_state(
+    (lr, fb, ud, yaw), is_intersection, debug = line_tracking_state(
         frame, turn_direction, target_width_px
     )
 
-    # Intersection direction switching
+    # intersection switching logic
     if state31_cooldown > 0:
         state31_cooldown -= 1
     else:
@@ -341,26 +363,45 @@ def state31(frame):
             state31_cooldown = cooldown_frames
             print(f"[state31] Switched to: {turning_seq_1[state31_idx]}")
 
-    return [lr, fb, ud, yw], debug, "state31"
+    return [lr, 0, ud, yaw], debug, "state31"
+
+
 
 
 
 def state32(frame):
     """
     Follow turning_seq_2 normally.
-    At the LAST direction: ignore line, move LEFT until marker 2 detected.
+    Fly LEFT for buffer period first.
+    At final step: ignore line, move LEFT until marker 2 detected.
     """
-    global state32_idx, state32_cooldown
+    global state32_idx, state32_cooldown, state32_buffer
 
     target_width_px = 40.0
     cooldown_frames = 25
     marker_id = 2
 
+    # ---------- BUFFER TIME: fly left ----------
+    if state32_buffer > 0:
+        state32_buffer -= 1
+        lr = -25
+        fb = 0
+        ud = 0
+        yaw = 0
+
+        debug = frame.copy()
+        cv2.putText(debug, f"BUFFER: Moving LEFT ({state32_buffer} left)",
+                    (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+
+        return [lr, fb, ud, yaw], debug, "state32"
+
+
+
     # ---------- CHECK FOR MARKER 2 ----------
-    x, y, z, yaw, _ = get_drone_position(frame, marker_id)
+    x, y, z, yaw_val, _ = get_drone_position(frame, marker_id)
     marker_seen = not np.isnan(x)
 
-    # ---------- FINAL STEP BEHAVIOR ----------
+    # ---------- FINAL STEP ----------
     if state32_idx == len(turning_seq_2) - 1:
         lr = -25
         fb = 0
@@ -379,12 +420,14 @@ def state32(frame):
 
         return [lr, fb, ud, yaw], debug, next_state
 
-    # ========== NORMAL LINE TRACKING STEP ==========
+
+    # ---------- NORMAL LINE TRACKING ----------
     turn_direction = turning_seq_2[state32_idx]
     (lr, fb, ud, yaw), is_intersection, debug = line_tracking_state(
         frame, turn_direction, target_width_px
     )
 
+    # intersection switching
     if state32_cooldown > 0:
         state32_cooldown -= 1
     else:
@@ -393,7 +436,7 @@ def state32(frame):
             state32_cooldown = cooldown_frames
             print(f"[state32] Switched to: {turning_seq_2[state32_idx]}")
 
-    return [lr, fb, ud, yaw], debug, "state32"
+    return [lr, 0, ud, yaw], debug, "state32"
 
 if __name__ == "__main__":
     # Direction plan: switch to next after each intersection
