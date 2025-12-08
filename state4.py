@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import datetime
 marker_id = 2
-location = np.array([0.0, 0.07, 0.7])  # x, y, z offsets for marker id 1
+location = np.array([0.0, 0.07, 0.8])  # x, y, z offsets for marker id 1
 location_time_thresh = 0.5  # seconds
 last_arrival_time = 0
 # using aruco to fly to the fixed position
@@ -13,7 +13,7 @@ def state4(frame):
     next_state = "state4"
     global last_arrival_time
     current_time = datetime.datetime.now().timestamp()
-    lr,fb,ud,yw = track_marker(frame,location,2)
+    lr,fb,ud,yw = track_marker(frame,location,marker_id)
     if any(v != 0 for v in [lr, fb, ud, yw]):
         last_arrival_time = current_time
     if current_time - last_arrival_time >= location_time_thresh:
