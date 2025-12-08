@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import datetime
 marker_id = 2
-location = np.array([0.0, 0.07, 0.8])  # x, y, z offsets for marker id 1
+location = np.array([0.0, 0.07, 0.8, 0.0])  # x, y, z offsets for marker id 1
 location_time_thresh = 0.5  # seconds
 last_arrival_time = 0
 # using aruco to fly to the fixed position
@@ -19,7 +19,7 @@ def state4(frame):
     if current_time - last_arrival_time >= location_time_thresh:
         # reached location
         lr = fb = ud = yw = 0
-        next_state = "state5"
+        next_state = "state5" # debug now fix to state5 later
     debug_frame = frame.copy()
     cv2.putText(
         debug_frame,

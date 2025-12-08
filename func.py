@@ -63,8 +63,8 @@ PID_X.output_limits = (-50, 50)
 PID_Y.output_limits = (-70, 70)
 PID_Z.output_limits = (-50, 50)
 PID_YAW.output_limits = (-50, 50)
-error_threshold = 0.16  # meters
-yaw_error_threshold = math.radians(10.0)  # radians
+error_threshold = 0.12  # meters
+yaw_error_threshold = math.radians(5.0)  # radians
 def reset_pid_controllers():
     PID_X.reset()
     PID_Y.reset()

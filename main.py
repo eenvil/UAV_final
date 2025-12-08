@@ -33,7 +33,7 @@ movement = {
 # Optional: state for your auto controller
 auto_state = {
     "t": 0.0,  # example time variable you might want to use
-    "current_state": "state2",  # example state variable
+    "current_state": "state4",  # example state variable
 }
 
 listener: Optional[keyboard.Listener] = None
@@ -101,6 +101,10 @@ def auto_step(tello: Tello, state: dict) -> Tuple[int, int, int, int]:
     elif state["current_state"] == "state72":
         [lr, fb, ud, yw], tmp_debug_frame, next_state = state72(frame)
         state["current_state"] = next_state
+    elif state["current_state"] == "state8":
+        # Landing state: just land and do nothing
+        lr = fb = ud = yw = 0
+        tello.land()
     else:
         # Unknown state, do nothing
         lr = fb = ud = yw = 0

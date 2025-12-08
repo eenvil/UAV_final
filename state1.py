@@ -84,7 +84,7 @@ def _load_latest_log_sequence():
     解析成 flight sequence。
     """
     base_dir = os.path.dirname(__file__)
-    logs = glob.glob(os.path.join(base_dir, "tello_debug_*.log"))
+    logs = glob.glob(os.path.join(base_dir, "tello_debug_state1.log"))
     if not logs:
         print("[state1] No log files found, using FALLBACK_SEQUENCE")
         return None

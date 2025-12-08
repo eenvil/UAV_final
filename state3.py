@@ -13,7 +13,7 @@ MIN_OCCUPANCY_FRACTION = 0.01      # for 3x3 grid
 
 # Gains for converting pixel error -> velocity [-100, 100]
 K_LR = 20.0      # left/right gain
-K_UD = 60.0      # up/down gain
+K_UD = 55.0      # up/down gain
 K_FB = 2.0        # forward/backward gain based on width error
 
 # Size of ROI around image center for width estimation
